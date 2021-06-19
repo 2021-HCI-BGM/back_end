@@ -44,7 +44,10 @@ def stop_thread(thread):
 
 
 def json_to_object(data):
-    return json.loads(data, object_hook=lambda d: Namespace(**d))
+    user_dic = json.loads(data)
+    print(user_dic['id'])
+    return user_dic
+    # return json.loads(data, object_hook=lambda d: Namespace(**d))
 
 
 def find_most(musics):
@@ -67,6 +70,7 @@ def find_most(musics):
 
 def change_score(music, emotion, index, percent):
     loss = 0
+    print("index:",index)
     if index == 0:
         loss = music.anger * (1 - percent)
         music.anger = music.anger * percent
@@ -86,6 +90,7 @@ def change_score(music, emotion, index, percent):
         loss = music.sadness * (1 - percent)
         music.sadness = music.sadness * percent
     elif index == 6:
+        print("Index_6")
         loss = music.surprise * (1 - percent)
         music.surprise = music.surprise * percent
     # 然后把对应的加到我们选择的感情上面去
@@ -96,6 +101,7 @@ def change_score(music, emotion, index, percent):
     elif emotion == "fear":
         music.fear += loss
     elif emotion == "hapiness":
+        print("change_hapiness")
         music.hapiness += loss
     elif emotion == "neutral":
         music.neutral += loss
@@ -103,6 +109,7 @@ def change_score(music, emotion, index, percent):
         music.sadness += loss
     elif emotion == "surprise":
         music.surprise += loss
+    print(music.surprise)
     return music
 
 
@@ -572,10 +579,11 @@ class Listener(Namespace):
         print("score:", data)
         # info=json.loads(data,object_hook=JSONObject)
         info = json_to_object(data)
+        print("info_id:", info['id'])
         print("info:", info)
-        id = info.id
-        score = info.score
-        emotion = info.emotion  # 这里的感情应该是一个字符串
+        id = info['id']
+        score = info['score']
+        emotion = info['emotion']  # 这里的感情应该是一个字符串
         music = find_by_id(id)
         # 然后根据分数去修改对应的属性...
         index = find_most(music)  # 得到了最大的属性的标号。
