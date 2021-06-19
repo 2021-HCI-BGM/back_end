@@ -22,7 +22,7 @@ from enum import Enum
 import inspect
 import ctypes
 from app import app
-
+from app import  db
 
 def _async_raise(tid, exctype):
     """raises the exception, performs cleanup if needed"""
@@ -94,20 +94,20 @@ def change_score(music, emotion, index, percent):
         loss = music.surprise * (1 - percent)
         music.surprise = music.surprise * percent
     # 然后把对应的加到我们选择的感情上面去
-    if emotion == "anger":
+    if emotion == 'anger':
         music.anger += loss
-    elif emotion == "disgust":
+    elif emotion == 'disgust':
         music.disgust += loss
-    elif emotion == "fear":
+    elif emotion == 'fear':
         music.fear += loss
-    elif emotion == "hapiness":
+    elif emotion == 'happiness':
         print("change_hapiness")
-        music.hapiness += loss
-    elif emotion == "neutral":
+        music.happiness += loss
+    elif emotion == 'neutral':
         music.neutral += loss
-    elif emotion == "sadness":
+    elif emotion == 'sadness':
         music.sadness += loss
-    elif emotion == "surprise":
+    elif emotion == 'surprise':
         music.surprise += loss
     print(music.surprise)
     return music
@@ -468,6 +468,7 @@ def testThreadFunction():
 
         parser.Parse(frame)  # 身体姿势分析
         res_points = pose_model.predict(frame)  # 手势分析
+        pose_model.vis_pose(res_points)
         if pose_model.gesture != tmp_gesture and pose_model.gesture != "Not Defined":  # 检测到手势变化
             tmp_gesture = pose_model.gesture
             print(tmp_gesture)
@@ -500,9 +501,13 @@ def testThreadFunction():
 
         # 根据手势对情感进行一个强化
         if tmp_pose == "BOTH_ARM_RISE" or tmp_pose == "LEFT_ARM_RISE" or tmp_pose == "RIGHT_ARM_RISE":  # 把手举高作为一个强化的标志
+            print("before face",tmp_pose)
             emotion = strengthen(face_test(frame))
+            print("before recommend")
         else:
+            print("before face")
             emotion = face_test(frame)
+            print("before recommend")
         rec_id = rec.recommend(emotion)  # 得到歌曲的id
         # rec_id = rec.recommend(face_test(frame))  # 得到歌曲的id
         print("rec_id", rec_id)
@@ -554,7 +559,7 @@ pose_model = general_pose_model(modelpath)  # 读取手势识别模型
 startorpause = False
 
 global_img = None
-
+counter=0
 
 class Listener(Namespace):
     def __init__(self, namespace):
@@ -695,11 +700,22 @@ class Listener(Namespace):
         if tmp_pose == "BOTH_ARM_RISE" or tmp_pose == "LEFT_ARM_RISE" or tmp_pose == "RIGHT_ARM_RISE":  # 把手举高作为一个强化的标志
             emotion = strengthen(face_test(frame))
         else:
+            print("before face")
             emotion = face_test(frame)
+        print("before rec")
         rec_id = rec.recommend(emotion)  # 得到歌曲的id
         print("rec_id", rec_id)
         if rec_id != -1:  # 其实也可以前端去判断？
-            socketio.emit('url', rec_id, namespace='/test')
+            # if rec_id!=last_id:
+            #
+            global counter
+            if counter >=10:
+                counter = 0
+                socketio.emit('url', rec_id, namespace='/test')
+            else : counter = counter+1
+            print("counter:",counter)
+            # time.sleep(10)#每首歌至少放10s 逻辑不应该是sleep...仍然应该收到打断的提示
+
         print("done")
         socketio.emit('done', "done", namespace='/test')
 
@@ -727,4 +743,5 @@ if __name__ == '__main__':
     # parser = PoseParser("NORMAL")
     rec = Recommend()
     socketio.run(app)
+    db.create_all()
     # parser.Parse()

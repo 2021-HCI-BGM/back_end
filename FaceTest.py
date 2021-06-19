@@ -59,7 +59,7 @@ def face_test(src):#加一个参数
         if len(json.loads(qrcont.decode('utf-8'))['faces']) < 1:
             return None#如果识别不出来脸那就返回这个...
         emotion = json.loads(qrcont.decode('utf-8'))['faces'][0]['attributes']['emotion']
-        print("emotion:",emotion)
+        print("emotion:", emotion)
         return emotion
         # print(qrcont.decode('utf-8'))
     except urllib.error.HTTPError as e:

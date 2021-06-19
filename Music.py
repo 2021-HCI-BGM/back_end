@@ -1,8 +1,13 @@
+import threading
+
 from app import db
 # import app
 # from pose import db
 from datetime import *
 
+mutex = threading.Lock()
+
+DB = db
 
 class Music(db.Model):
     __tablename__ = 'music'
@@ -29,17 +34,76 @@ def find_by_id(id):
     return Music.query.filter(Music.id == id)[0]
 
 
-def insert_music(music):
+def insert_music(mmusic):
     # db.session.add(music)
     # db.session.commit()
+    # print("before insert")
 
-    db.session.query(Music).filter_by(id=id).update({'time': music.time, "anger": music.anger,
-                                                     "disgust": music.disgust,
-                                                     "fear": music.fear,
-                                                     "happiness": music.happiness,
-                                                     "neutral": music.neutral,
-                                                     "sadness": music.sadness,
-                                                     "surprise": music.surprise})
+    # mutex.acquire()
+
+    # db.session.add(music)
+    # db.session.update()
+    # db.session.commit()
+    # Id = int(music.id)
+    # print("music_id:", Id)
+    # db.drop_all()
+    db.create_all()
+    try:
+        old = Music.query.filter_by(id=mmusic.id)[0]
+        # print("after filter")
+        # # 更新用户的数据
+        old.time = mmusic.time
+        old.anger = mmusic.anger
+        old.disgust = mmusic.disgust
+        old.fear = mmusic.fear
+        old.happiness = mmusic.happiness
+        old.neutral = mmusic.neutral
+        old.sadness = mmusic.sadness
+        old.surprise = mmusic.surprise
+        # # 最后提交到数据库
+        db.session.add(old)
+        print("before commit")
+        # db.session.commit()
+        # db.session.flush()
+        print("after commit")
+    except Exception as e:
+        # 加入数据库commit提交失败，必须回滚！！！
+        db.session.rollback()
+        raise e
+    return -1
+    old = Music.query.filter_by(id=mmusic.id)[0]
+    # print("after filter")
+    # # 更新用户的数据
+    old.time = mmusic.time
+    old.anger = mmusic.anger
+    old.disgust = mmusic.disgust
+    old.fear = mmusic.fear
+    old.happiness = mmusic.happiness
+    old.neutral = mmusic.neutral
+    old.sadness = mmusic.sadness
+    old.surprise = mmusic.surprise
+    # # 最后提交到数据库
+    db.session.add(old)
+    print("before commit")
+    db.session.commit()
+    print("after commit")
+    return -1
+    Id = int(music.id)
+    print("music_id:", Id)
+    # # db.session.query(Music).filter_by(id=Id).update({
+    # DB.session.query(Music).filter(Music.id == Id)
+    # print("find")
+    DB.session.query(Music).filter(Music.id == Id).update({
+        'time': music.time,
+        'anger': int(music.anger),
+        'disgust': int(music.disgust),
+        'fear': int(music.fear),
+        'happiness': int(music.happiness),
+        'neutral': int(music.neutral),
+        'sadness': int(music.sadness),
+        'surprise': int(music.surprise)
+    })
+    # mutex.release()
 
 
 if __name__ == '__main__':

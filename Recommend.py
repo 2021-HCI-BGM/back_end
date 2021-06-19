@@ -23,7 +23,10 @@ class Recommend:
         musics = self.musics
         max_value = 0
         max_idx = 0
+
+        print(musics.count())
         for i in range(musics.count()):
+            # print(i)
             music_emotion = np.zeros(7)
             music_emotion[0] = musics[i].anger
             music_emotion[1] = musics[i].disgust
@@ -43,9 +46,11 @@ class Recommend:
             if emotion_value > max_value:
                 max_value = emotion_value
                 max_idx = i
-
+        # print("after loop")
         musics[max_idx].time = datetime.now()
+        # print("after time")
         insert_music(musics[max_idx])
+
 
         print(max_value)
 
