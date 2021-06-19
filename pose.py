@@ -1,5 +1,7 @@
 # from json.decoder import JSONObject
+import base64
 import os
+import re
 
 import cv2 as cv
 import numpy as np
@@ -240,7 +242,7 @@ class PoseParser:
         freq = cv.getTickFrequency() / 1000
         cv.putText(frame, '%.2fms' % (t / freq), (10, 20), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0))
 
-        cv.imshow('OpenPose using OpenCV', frame)
+        # cv.imshow('OpenPose using OpenCV', frame)
 
 
 # HandParse
@@ -491,10 +493,44 @@ def testThreadFunction():
         rec_id = rec.recommend(emotion)  # 得到歌曲的id
         # rec_id = rec.recommend(face_test(frame))  # 得到歌曲的id
         print("rec_id", rec_id)
-        if rec_id is not -1:  # 其实也可以前端去判断？
+        if rec_id != -1:  # 其实也可以前端去判断？
             socketio.emit('url', rec_id, namespace='/test')
 
     cap.release()
+
+
+def decode_base64(data):
+    """Decode base64, padding being optional.
+    :param data: Base64 data as an ASCII byte string
+    :returns: The decoded byte string.
+
+    """
+    missing_padding = 4 - len(data) % 4
+    if missing_padding:
+        data += b'=' * missing_padding
+    return base64.decodestring(data)
+
+
+def base64_to_image(base64_code):
+    # base64_code = base64_code.replace(' ', '+')
+    # base64解码
+    # base64_code=decode_base64(base64_code)
+    # base64_code=base64.decodestring(base64_code.encode('ascii'))
+    # img_data = base64.b64decode(base64_code)
+    #
+    # # img_data = base64_code
+    # # 转换为np数组
+    # img_array = np.fromstring(str(img_data), np.uint8)
+    # # 转换成opencv可用格式
+    # # img = cv2.imdecode(img_array, cv2.COLOR_RGB2BGR)
+    # img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+    print("test:", base64_code)
+    imgData = base64.b64decode(base64_code)
+    nparr = np.frombuffer(imgData, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    # cv2.imshow("test",img_np)
+    # cv2.waitKey(0)
+    return img
 
 
 class Listener(Namespace):
@@ -508,13 +544,13 @@ class Listener(Namespace):
         # 连接之后，在这里新开一个线程，跑图像处理的部分
         # 注意：断开连接后，需要将线程停止
         emit('server_response', {'data': 'Connected', 'count': 0})  # 返回消息给前端告诉他连接成功了
-        global thread
-        if thread is None:
-            thread = Thread(target=testThreadFunction)
-            thread.daemon = True  # 守护？可以自动结束子进程？
-            print("创建线程")
-            thread.start()
-            print("开始线程")
+        # global thread
+        # if thread is None:
+        #     thread = Thread(target=testThreadFunction)
+        #     thread.daemon = True  # 守护？可以自动结束子进程？
+        #     print("创建线程")
+        #     thread.start()
+        #     print("开始线程")
 
     def on_score(self, data):  # 前端评分传给我们后端
         print("score:", data)
@@ -560,19 +596,88 @@ class Listener(Namespace):
             print(1)
         insert_music(music)
 
-    def on_disconnect(self):  # 其实可以没有...
-        print('客户端断开连接！')
-        # 然后关闭线程
-        global thread
-        # stop_thread(thread)
-        thread = None
+    def on_picture(self, data):
+        # img_np=cv2.imread("./test.jpg")
+        # cv2.imshow("test:", img_np)
+        # cv2.waitKey(0)
+        # image = cv2.imencode('.jpg', img_np)[1]
+        # print("picture:", base64.b64encode(image))
+        # base64_data = str(base64.b64encode(image))[2:-1]
+        # data = base64_data
+        # data = str(data)[2:-1]
+        result = re.search("data:image/(?P<ext>.*?);base64,(?P<data>.*)", data, re.DOTALL)
+        if result:
+            ext = result.groupdict().get("ext")
+            data = result.groupdict().get("data")
 
-    def close_room(self, room):
-        socketio.close_room(room=self.sid)
-        print('{}-断开连接'.format(self.sid))
+        else:
+            raise Exception("Do not parse!")
 
-    def on_my_event(self, data):  # 这里拿到前端的my_event接口发送的数据data
-        print(data)
+        # 2、base64解码
+        imgData = base64.urlsafe_b64decode(data)
+        nparr = np.frombuffer(imgData, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        # print("picture:", data)
+        # img = base64_to_image(data)
+        # cv.imshow("img:", img)
+        # cv2.waitKey(0)
+        frame = img
+        parser = PoseParser("NORMAL")
+        tmp_pose = "NORMAL"
+        tmp_gesture = "Not Defined"
+        modelpath = "./model/"
+        pose_model = general_pose_model(modelpath)  # 读取手势识别模型
+        startorpause = False
+        rec = Recommend()
+        print("time:", startorpause)
+        print("pre:", startorpause)
+        pre = preProcess.preprocess(frame)  # 预处理
+        parser.Parse(frame)  # 身体姿势分析
+        res_points = pose_model.predict(frame)  # 手势分析
+        if pose_model.gesture != tmp_gesture and pose_model.gesture != "Not Defined":  # 检测到手势变化
+            tmp_gesture = pose_model.gesture
+            print("tmp_gesture:",tmp_gesture)
+            if tmp_gesture == "GOOD":
+                startorpause = True  # 此时识别出是trigger动作
+            if tmp_gesture == "OK":
+                startorpause = False  # 此时识别出是关闭动作
+            # 如果是其他动作或者检测不到，那么就还是维持上一循环的数据
+            socketio.emit('trigger', startorpause, namespace='/test')
+        if parser.pose != tmp_pose:  # 当pose发生变化
+            tmp_pose = parser.pose
+            print("parser",parser.pose)
+        print("judge:", startorpause)
+        if startorpause == False:
+            return None
+        # 只有是true的时候才识别，也就是加上吕泽宇和数据库的操作
+
+        # 可以考虑加一个计数器来降低更新频率？
+        # 根据手势对情感进行一个强化
+        if tmp_pose == "BOTH_ARM_RISE" or tmp_pose == "LEFT_ARM_RISE" or tmp_pose == "RIGHT_ARM_RISE":  # 把手举高作为一个强化的标志
+            emotion = strengthen(face_test(frame))
+        else:
+            emotion = face_test(frame)
+        rec_id = rec.recommend(emotion)  # 得到歌曲的id
+        print("rec_id", rec_id)
+        if rec_id != -1:  # 其实也可以前端去判断？
+            socketio.emit('url', rec_id, namespace='/test')
+
+
+def on_disconnect(self):  # 其实可以没有...
+    print('客户端断开连接！')
+    # 然后关闭线程
+    global thread
+    # stop_thread(thread)
+    thread = None
+
+
+def close_room(self, room):
+    socketio.close_room(room=self.sid)
+    print('{}-断开连接'.format(self.sid))
+
+
+def on_my_event(self, data):  # 这里拿到前端的my_event接口发送的数据data
+    print(data)
 
 
 socketio.on_namespace(Listener('/test'))  # 路径是http://localhost:5000/test
