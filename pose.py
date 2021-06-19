@@ -2,7 +2,7 @@
 import base64
 import os
 import re
-
+import time
 import cv2 as cv
 import numpy as np
 import argparse
@@ -21,6 +21,7 @@ from enum import Enum
 
 import inspect
 import ctypes
+from app import app
 
 
 def _async_raise(tid, exctype):
@@ -418,19 +419,21 @@ class general_pose_model(object):
                 cv2.circle(img_cv2, tuple(points[partA]), 5, (0, 0, 255), thickness=-1, lineType=cv2.FILLED)
                 cv2.circle(img_cv2, tuple(points[partB]), 5, (0, 0, 255), thickness=-1, lineType=cv2.FILLED)
 
-        # cv2.imshow('OpenPose using OpenCV', img_cv2)
+        cv2.imshow('OpenPose using OpenCV', img_cv2)
 
 
-app = Flask(__name__)
+# app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
-
-app.config['SQLALCHEMY_DATABASE_URI'] = "mysql+pymysql://root:123456@localhost:3306/music"
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
-app.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True
-
-db = SQLAlchemy(app)
+#
+# app.config['SQLALCHEMY_DATABASE_URI'] = "mysql+pymysql://root:123456@localhost:3306/music"
+# app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
+# app.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True
+#
+# db = SQLAlchemy(app)
 
 thread = None
+
+import time
 
 
 def testThreadFunction():
@@ -443,9 +446,12 @@ def testThreadFunction():
     startorpause = False
     rec = Recommend()
     while cv.waitKey(1) < 0:
+        # time.sleep(0.1)
         print("time:", startorpause)
         hasFrame, frame = cap.read()
-        if not hasFrame:  # 如果读取不正确
+        # global global_img
+        # frame = global_img
+        if frame is None:  # 如果读取不正确
             cv.waitKey()
             cap = cv2.VideoCapture(0)
             print("Not Ok")
@@ -533,6 +539,16 @@ def base64_to_image(base64_code):
     return img
 
 
+parser = PoseParser("NORMAL")
+tmp_pose = "NORMAL"
+tmp_gesture = "Not Defined"
+modelpath = "./model/"
+pose_model = general_pose_model(modelpath)  # 读取手势识别模型
+startorpause = False
+
+global_img = None
+
+
 class Listener(Namespace):
     def __init__(self, namespace):
         super(Listener, self).__init__(namespace)
@@ -597,6 +613,8 @@ class Listener(Namespace):
         insert_music(music)
 
     def on_picture(self, data):
+        print("picture")
+        # return -1
         # img_np=cv2.imread("./test.jpg")
         # cv2.imshow("test:", img_np)
         # cv2.waitKey(0)
@@ -617,37 +635,50 @@ class Listener(Namespace):
         imgData = base64.urlsafe_b64decode(data)
         nparr = np.frombuffer(imgData, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        # print("picture:", data)
-        # img = base64_to_image(data)
+        # cv2.resize(img,(368,368),img)
+        # # print("picture:", data)
+        # # img = base64_to_image(data)
         # cv.imshow("img:", img)
         # cv2.waitKey(0)
         frame = img
-        parser = PoseParser("NORMAL")
-        tmp_pose = "NORMAL"
-        tmp_gesture = "Not Defined"
-        modelpath = "./model/"
-        pose_model = general_pose_model(modelpath)  # 读取手势识别模型
-        startorpause = False
-        rec = Recommend()
+        # global global_img
+        # global_img = img
+        # return -1
+        # parser = PoseParser("NORMAL")
+        # tmp_pose = "NORMAL"
+        # tmp_gesture = "Not Defined"
+        # modelpath = "./model/"
+        # pose_model = general_pose_model(modelpath)  # 读取手势识别模型
+        # startorpause = False
+        # rec = Recommend()
+        global startorpause
+        global tmp_gesture
+        global tmp_pose
+        # global rec
         print("time:", startorpause)
         print("pre:", startorpause)
-        pre = preProcess.preprocess(frame)  # 预处理
+        # pre = preProcess.preprocess(frame)  # 预处理
         parser.Parse(frame)  # 身体姿势分析
         res_points = pose_model.predict(frame)  # 手势分析
+        # pose_model.vis_pose(frame, res_points)
+        print("before getsture")
         if pose_model.gesture != tmp_gesture and pose_model.gesture != "Not Defined":  # 检测到手势变化
             tmp_gesture = pose_model.gesture
-            print("tmp_gesture:",tmp_gesture)
+            print("tmp_gesture:", tmp_gesture)
             if tmp_gesture == "GOOD":
                 startorpause = True  # 此时识别出是trigger动作
             if tmp_gesture == "OK":
                 startorpause = False  # 此时识别出是关闭动作
             # 如果是其他动作或者检测不到，那么就还是维持上一循环的数据
             socketio.emit('trigger', startorpause, namespace='/test')
+        print("before pose")
         if parser.pose != tmp_pose:  # 当pose发生变化
             tmp_pose = parser.pose
-            print("parser",parser.pose)
+            print("parser", parser.pose)
         print("judge:", startorpause)
         if startorpause == False:
+            print("return done")
+            socketio.emit('done', "done", namespace='/test')
             return None
         # 只有是true的时候才识别，也就是加上吕泽宇和数据库的操作
 
@@ -661,14 +692,16 @@ class Listener(Namespace):
         print("rec_id", rec_id)
         if rec_id != -1:  # 其实也可以前端去判断？
             socketio.emit('url', rec_id, namespace='/test')
+        print("done")
+        socketio.emit('done', "done", namespace='/test')
 
 
 def on_disconnect(self):  # 其实可以没有...
     print('客户端断开连接！')
     # 然后关闭线程
-    global thread
-    # stop_thread(thread)
-    thread = None
+    # global thread
+    # # stop_thread(thread)
+    # thread = None
 
 
 def close_room(self, room):
@@ -684,5 +717,6 @@ socketio.on_namespace(Listener('/test'))  # 路径是http://localhost:5000/test
 
 if __name__ == '__main__':
     # parser = PoseParser("NORMAL")
+    rec = Recommend()
     socketio.run(app)
     # parser.Parse()

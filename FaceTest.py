@@ -53,13 +53,13 @@ def face_test(src):#加一个参数
         resp = urllib.request.urlopen(req, timeout=5)
         # get response
         qrcont = resp.read()
-        print(qrcont)
+        print("qrcont:",qrcont)
         # if you want to load as json, you should decode first,
         # for example: json.loads(qrount.decode('utf-8'))
         if len(json.loads(qrcont.decode('utf-8'))['faces']) < 1:
             return None#如果识别不出来脸那就返回这个...
         emotion = json.loads(qrcont.decode('utf-8'))['faces'][0]['attributes']['emotion']
-        print(emotion)
+        print("emotion:",emotion)
         return emotion
         # print(qrcont.decode('utf-8'))
     except urllib.error.HTTPError as e:

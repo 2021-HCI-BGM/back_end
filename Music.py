@@ -1,4 +1,5 @@
 from app import db
+# import app
 # from pose import db
 from datetime import *
 
@@ -29,8 +30,16 @@ def find_by_id(id):
 
 
 def insert_music(music):
-    db.session.add(music)
-    db.session.commit()
+    # db.session.add(music)
+    # db.session.commit()
+
+    db.session.query(Music).filter_by(id=id).update({'time': music.time, "anger": music.anger,
+                                                     "disgust": music.disgust,
+                                                     "fear": music.fear,
+                                                     "happiness": music.happiness,
+                                                     "neutral": music.neutral,
+                                                     "sadness": music.sadness,
+                                                     "surprise": music.surprise})
 
 
 if __name__ == '__main__':
