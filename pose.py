@@ -1,4 +1,5 @@
 # from json.decoder import JSONObject
+import os
 
 import cv2 as cv
 import numpy as np
@@ -242,6 +243,182 @@ class PoseParser:
         cv.imshow('OpenPose using OpenCV', frame)
 
 
+# HandParse
+flag = np.array([-1, -1])
+
+
+class general_pose_model(object):
+    def __init__(self, modelpath):
+        self.num_points = 22
+        self.point_pairs = [[0, 1], [1, 2], [2, 3], [3, 4],
+                            [0, 5], [5, 6], [6, 7], [7, 8],
+                            [0, 9], [9, 10], [10, 11], [11, 12],
+                            [0, 13], [13, 14], [14, 15], [15, 16],
+                            [0, 17], [17, 18], [18, 19], [19, 20]]
+        # self.inWidth = 368
+        self.inHeight = 368
+        self.threshold = 0.2
+        self.hand_net = self.get_hand_model(modelpath)
+        self.gesture = "Not Defined"
+
+    def get_hand_model(self, modelpath):
+
+        prototxt = os.path.join(modelpath, "hand/pose_deploy.prototxt")
+        caffemodel = os.path.join(modelpath, "hand/pose_iter_102000.caffemodel")
+        hand_model = cv2.dnn.readNetFromCaffe(prototxt, caffemodel)
+
+        return hand_model
+
+    def predict(self, img_cv2):
+        # img_cv2 = cv2.imread(imgfile)
+        img_height, img_width, _ = img_cv2.shape
+        aspect_ratio = img_width / img_height
+
+        inWidth = int(((aspect_ratio * self.inHeight) * 8) // 8)
+        inpBlob = cv2.dnn.blobFromImage(img_cv2, 1.0 / 255, (inWidth, self.inHeight), (0, 0, 0), swapRB=False,
+                                        crop=False)
+        self.hand_net.setInput(inpBlob)
+        output = self.hand_net.forward()
+        # vis heatmaps
+        # self.vis_heatmaps(imgfile, output)
+
+        #
+        points = []
+        limit_points = []
+        for idx in range(self.num_points):
+            probMap = output[0, idx, :, :]  # confidence map.
+            probMap = cv2.resize(probMap, (img_width, img_height))
+
+            # Find global maxima of the probMap.
+            minVal, prob, minLoc, point = cv2.minMaxLoc(probMap)
+
+            if prob > self.threshold:
+                # points.append((int(point[0]), int(point[1])))
+                cv2.circle(img_cv2, (int(point[0]), int(point[1])), 6, (0, 255, 255), thickness=-1,
+                           lineType=cv2.FILLED)
+                cv2.putText(img_cv2, "{}".format(idx), (int(point[0]), int(point[1])), cv2.FONT_HERSHEY_SIMPLEX, .8,
+                            (0, 0, 255), 2, lineType=cv2.LINE_AA)
+                points.append(np.array([int(point[0]), int(point[1])]))
+
+            else:
+                # points.append(None)
+                points.append(flag)
+
+        # 手势识别部分：
+        limit = np.concatenate(([points[0]], [points[3]], [points[7]], [points[11]], [points[15]], [points[19]]),
+                               axis=0)
+        # print(limit)
+        for i in limit:
+            if (i == flag).any():
+                pass
+            else:
+                limit_points.append(i)
+        limit_points = np.array(limit_points)
+
+        if limit_points.size > 0:
+            (x, y), radius = cv2.minEnclosingCircle(limit_points)
+            # print(x,y,radius)
+            center = (int(x), int(y))
+            radius = int(radius)
+            flag_distance = radius * 0.1
+            # print(points[4],points[8],points[12],points[16],points[20])
+            # 计算每个判断点到圆边界的距离
+            if (points[4] != flag).all():
+                distance_4 = np.linalg.norm(points[4] - center) - radius
+            else:
+                distance_4 = 0
+            if (points[8] != flag).all():
+                distance_8 = np.linalg.norm(points[8] - center) - radius
+            else:
+                distance_8 = 0
+            if (points[12] != flag).all():
+                distance_12 = np.linalg.norm(points[12] - center) - radius
+            else:
+                distance_12 = 0
+            if (points[16] != flag).all():
+                distance_16 = np.linalg.norm(points[16] - center) - radius
+            else:
+                distance_16 = 0
+            if (points[20] != flag).all():
+                distance_20 = np.linalg.norm(points[20] - center) - radius
+            else:
+                distance_20 = 0
+
+            # if distance_8 >= flag_distance and (
+            #         np.array([distance_4, distance_12, distance_16, distance_20]) < flag_distance).all():
+            #     result = "this is one"
+            #     self.gesture = "ONE"
+            # elif (np.array([distance_8, distance_12]) >= flag_distance).all() and (
+            #         np.array([distance_4, distance_16, distance_20]) < flag_distance).all():
+            #     result = "this is two"
+            # elif (np.array([distance_8, distance_12, distance_16,
+            #                 distance_20]) >= flag_distance).all() and distance_4 < flag_distance:
+            #     result = "this is four"
+            # elif (np.array([distance_4, distance_8, distance_12, distance_16, distance_20]) >= flag_distance).all():
+            #     result = "this is five"
+            # elif (np.array([distance_4, distance_8, distance_12, distance_16, distance_20]) <= flag_distance).all():
+            #     result = "this is fist"
+            # elif (np.array([distance_4, distance_8]) >= flag_distance).all() and (
+            #         np.array([distance_12, distance_16, distance_20]) < flag_distance).all():
+            #     result = "this is eight"
+            if distance_4 >= flag_distance and (
+                    np.array([distance_8, distance_16, distance_20]) < flag_distance).all():
+                result = "this is good"
+                self.gesture = "GOOD"
+            # elif distance_12 >= flag_distance and (
+            #         np.array([distance_4, distance_8, distance_16, distance_20]) < flag_distance).all():
+            #     result = "this is out"
+            elif (np.array([distance_12, distance_16]) >= flag_distance).all() and distance_4 < flag_distance:
+                result = "this is OK"
+                self.gesture = "OK"
+
+            # elif (np.array([distance_16, distance_20]) >= flag_distance).all() and distance_4 < flag_distance:
+            #     result = "this is love"
+            else:
+                result = "can't find"
+                self.gesture = "Not Defined"
+
+            cv2.putText(img_cv2, result, (430, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2, lineType=cv2.LINE_AA)
+
+        return points
+
+    # def vis_heatmaps(self, imgfile, net_outputs):
+    #     img_cv2 = cv2.imread(imgfile)
+    #     plt.figure(figsize=[10, 10])
+    #
+    #     for pdx in range(self.num_points):
+    #         probMap = net_outputs[0, pdx, :, :]
+    #         probMap = cv2.resize(probMap, (img_cv2.shape[1], img_cv2.shape[0]))
+    #         plt.subplot(5, 5, pdx + 1)
+    #         plt.imshow(cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB))
+    #         plt.imshow(probMap, alpha=0.6)
+    #         plt.colorbar()
+    #         plt.axis("off")
+    #     plt.show()
+
+    def vis_pose(self, img_cv2, points):
+        # img_cv2 = cv2.imread(imgfile)
+        img_cv2_copy = np.copy(img_cv2)
+        # for idx in range(len(points)):
+        #     if points[idx]:
+        #         cv2.circle(img_cv2_copy, points[idx], 8, (0, 255, 255), thickness=-1,
+        #                    lineType=cv2.FILLED)
+        #         cv2.putText(img_cv2_copy, "{}".format(idx), points[idx], cv2.FONT_HERSHEY_SIMPLEX,
+        #                     1, (0, 0, 255), 2, lineType=cv2.LINE_AA)
+
+        # Draw Skeleton
+        for pair in self.point_pairs:
+            partA = pair[0]
+            partB = pair[1]
+
+            if (points[partA] != flag).any() and (points[partB] != flag).any():
+                cv2.line(img_cv2, tuple(points[partA]), tuple(points[partB]), (0, 255, 255), 2, lineType=cv2.LINE_AA)
+                cv2.circle(img_cv2, tuple(points[partA]), 5, (0, 0, 255), thickness=-1, lineType=cv2.FILLED)
+                cv2.circle(img_cv2, tuple(points[partB]), 5, (0, 0, 255), thickness=-1, lineType=cv2.FILLED)
+
+        # cv2.imshow('OpenPose using OpenCV', img_cv2)
+
+
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
@@ -258,6 +435,9 @@ def testThreadFunction():
     parser = PoseParser("NORMAL")
     cap = cv2.VideoCapture(0)  # 调整参数实现读取视频或调用摄像头
     tmp_pose = "NORMAL"
+    tmp_gesture = "Not Defined"
+    modelpath = "./model/"
+    pose_model = general_pose_model(modelpath)  # 读取手势识别模型
     startorpause = False
     rec = Recommend()
     while cv.waitKey(1) < 0:
@@ -271,18 +451,29 @@ def testThreadFunction():
         print("pre:", startorpause)
         pre = preProcess.preprocess(frame)  # 预处理
 
-        parser.Parse(frame)
+        parser.Parse(frame)  # 身体姿势分析
+        res_points = pose_model.predict(frame)  # 手势分析
+        if pose_model.gesture != tmp_gesture and pose_model.gesture != "Not Defined":  # 检测到手势变化
+            tmp_gesture = pose_model.gesture
+            print(tmp_gesture)
+            if tmp_gesture == "GOOD":
+                startorpause = True  # 此时识别出是trigger动作
+            if tmp_gesture == "OK":
+                startorpause = False  # 此时识别出是关闭动作
+            # 如果是其他动作或者检测不到，那么就还是维持上一循环的数据
+            socketio.emit('trigger', startorpause, namespace='/test')
+
         if parser.pose != tmp_pose:  # 当pose发生变化
             tmp_pose = parser.pose
             print(parser.pose)
             # socketio.emit('server_response', {'data': tmp_pose, 'time': 'now'}, namespace='/test')
             # 在emit之前需要加一层判断，判断得到的pose是开始的trigger还是结束的trigger
-            if tmp_pose == "LEFT_TILT":
-                startorpause = True  # 此时识别出是trigger动作
-            if tmp_pose == "RIGHT_TILT":
-                startorpause = False  # 此时识别出是关闭动作
-            # 如果是其他动作或者检测不到，那么就还是维持上一循环的数据
-            socketio.emit('trigger', startorpause, namespace='/test')
+            # if tmp_pose == "LEFT_TILT":
+            #     startorpause = True  # 此时识别出是trigger动作
+            # if tmp_pose == "RIGHT_TILT":
+            #     startorpause = False  # 此时识别出是关闭动作
+            # # 如果是其他动作或者检测不到，那么就还是维持上一循环的数据
+            # socketio.emit('trigger', startorpause, namespace='/test')
         # print("time:", "now")
         # 这里还有一个逻辑，如果trigger是false的话，也就停止后面的识别动作了...
         print("judge:", startorpause)
@@ -293,7 +484,7 @@ def testThreadFunction():
         # 可以考虑加一个计数器来降低更新频率？
 
         # 根据手势对情感进行一个强化
-        if tmp_pose == "BOTH_ARM_RISE" or tmp_pose == "LEFT_ARM_RISE" or tmp_pose == "RIGHT_ARM_RISE":#把手举高作为一个强化的标志
+        if tmp_pose == "BOTH_ARM_RISE" or tmp_pose == "LEFT_ARM_RISE" or tmp_pose == "RIGHT_ARM_RISE":  # 把手举高作为一个强化的标志
             emotion = strengthen(face_test(frame))
         else:
             emotion = face_test(frame)
