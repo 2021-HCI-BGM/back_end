@@ -559,7 +559,7 @@ pose_model = general_pose_model(modelpath)  # 读取手势识别模型
 startorpause = False
 
 global_img = None
-counter=0
+counter=10
 
 class Listener(Namespace):
     def __init__(self, namespace):
@@ -709,7 +709,7 @@ class Listener(Namespace):
             # if rec_id!=last_id:
             #
             global counter
-            if counter >=10:
+            if counter >=5:
                 counter = 0
                 socketio.emit('url', rec_id, namespace='/test')
             else : counter = counter+1

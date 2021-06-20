@@ -50,7 +50,7 @@ def face_test(src):#加一个参数
 
     try:
         # post data to server
-        resp = urllib.request.urlopen(req, timeout=5)
+        resp = urllib.request.urlopen(req, timeout=10)
         # get response
         qrcont = resp.read()
         print("qrcont:",qrcont)
